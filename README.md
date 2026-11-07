@@ -2,9 +2,21 @@
 
 <h1 align="center">envdesk</h1>
 
+<p align="center"><b>Never paste a secret into your coding AI's chat again.</b></p>
+
+When your AI coding assistant needs an API key, it usually asks you to paste it into the chat or run a terminal command. Either way, the secret ends up in a chat history or a log. With envdesk, you open the app, paste the key in, and press Save. Your assistant then reads it from the project's `.env` file, as your code does, and never sees the key itself.
+
+It's made to be easy. You don't need to know any terminal commands, where a `.env` file lives, or how shell variables work. You pick your project, choose the key's name, paste the value, and it's done.
+
+**Why it exists.** I kept running into this while helping people who aren't developers build something of their own with an AI coding assistant. The code was easy for them. The keys were where it went wrong: pasting them into chat, losing track of which file they went in, or getting stuck on a terminal command. envdesk is the tool I wanted to hand them.
+
+## In short
+
 A small native Mac app for the API keys scattered across your `.env` files and shell profile. Pick a project, paste a key, and it lands in the right file. Browse every key you have, masked, behind Touch ID.
 
 It's two Swift files with no dependencies, no network access and no account. It only reads and writes plain files on your Mac.
+
+**Tell your AI assistant:** "Don't ask me for keys in chat. Tell me the variable name and I'll add it in envdesk." Then check with it afterwards that the key is present, by name only.
 
 ## What it does
 
