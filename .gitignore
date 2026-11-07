@@ -1,0 +1,5 @@
+*.app/
+.build/
+.DS_Store
+.env*
+*.bak
