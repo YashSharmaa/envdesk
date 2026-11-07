@@ -169,6 +169,32 @@ func masked(_ v: String) -> String {
     v.count <= 8 ? String(repeating: "•", count: v.count) : String(v.prefix(4)) + String(repeating: "•", count: 8) + String(v.suffix(4))
 }
 
+// MARK: - Unlock, shared by the window and the menu bar
+
+var unlockedUntil = Date.distantPast
+
+/// Touch ID or the Mac password before any value is shown or copied, then 5 minutes free.
+func withUnlock(_ require: Bool, onFail: @escaping () -> Void = {}, _ then: @escaping () -> Void) {
+    if !require || Date() < unlockedUntil { then(); return }
+    LAContext().evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "show or copy a secret") { ok, _ in
+        DispatchQueue.main.async {
+            if ok { unlockedUntil = Date().addingTimeInterval(300); then() } else { onFail() }
+        }
+    }
+}
+
+/// Copies, and clears the clipboard after `seconds` unless something else was copied since.
+func copySecret(_ text: String, clearAfter seconds: Int) {
+    let pb = NSPasteboard.general
+    pb.clearContents(); pb.setString(text, forType: .string)
+    let count = pb.changeCount
+    if seconds > 0 {
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(seconds)) {
+            if NSPasteboard.general.changeCount == count { NSPasteboard.general.clearContents() }
+        }
+    }
+}
+
 // MARK: - View
 
 struct ContentView: View {
@@ -180,7 +206,6 @@ struct ContentView: View {
     @State private var targets: Set<String> = ["mac"]
     @State private var status = ""
     @State private var projects: [Project] = loadProjects()
-    @State private var unlockedUntil = Date.distantPast
     @State private var importing = false
     @State private var importText = ""
     @State private var importPrefix = ""
@@ -203,15 +228,8 @@ struct ContentView: View {
         risky = Set(stores.filter { !$0.shellExport && committable($0.path) }.map(\.id))
     }
 
-    /// Touch ID or the Mac password before any value is shown or copied, then 5 minutes free.
     func unlocked(_ then: @escaping () -> Void) {
-        if !requireUnlock || Date() < unlockedUntil { then(); return }
-        let ctx = LAContext()
-        ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "show or copy a secret") { ok, _ in
-            DispatchQueue.main.async {
-                if ok { unlockedUntil = Date().addingTimeInterval(300); then() } else { status = "Not unlocked." }
-            }
-        }
+        withUnlock(requireUnlock, onFail: { status = "Not unlocked." }, then)
     }
 
     func save(_ pairs: [(String, String)]) {
@@ -227,15 +245,8 @@ struct ContentView: View {
     }
 
     func copy(_ text: String, label: String) {
-        let pb = NSPasteboard.general
-        pb.clearContents(); pb.setString(text, forType: .string)
-        let count = pb.changeCount
+        copySecret(text, clearAfter: clearSeconds)
         status = clearSeconds > 0 ? "Copied \(label). The clipboard clears in \(clearSeconds) s." : "Copied \(label)."
-        if clearSeconds > 0 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(clearSeconds)) {
-                if NSPasteboard.general.changeCount == count { NSPasteboard.general.clearContents() }
-            }
-        }
     }
 
     func reveal(_ e: Entry) {
@@ -382,8 +393,81 @@ struct ContentView: View {
     }
 }
 
+// MARK: - Menu bar
+
+struct MenuBarView: View {
+    @AppStorage("project") private var projectName = ""
+    @AppStorage("clearClipboardSeconds") private var clearSeconds = 30
+    @AppStorage("requireUnlock") private var requireUnlock = true
+    @Environment(\.openWindow) private var openWindow
+    @State private var projects: [Project] = []
+    @State private var entries: [Entry] = []
+    @State private var filter = ""
+    @State private var note = ""
+
+    var project: Project? { projects.first { $0.name == projectName } ?? projects.first }
+    var shown: [Entry] { filter.isEmpty ? entries : entries.filter { $0.name.localizedCaseInsensitiveContains(filter) } }
+
+    func reload() { projects = loadProjects(); entries = storesFor(project).flatMap(read) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(nsImage: Logo.menuBarIcon())
+                Text("envdesk").font(.headline)
+                Spacer()
+                Picker("", selection: $projectName) {
+                    if projects.isEmpty { Text("No project").tag("") }
+                    ForEach(projects) { p in Text(p.name).tag(p.name) }
+                }.labelsHidden().frame(width: 150)
+                .onChange(of: projectName) { reload() }
+            }
+            TextField("Search keys", text: $filter).textFieldStyle(.roundedBorder)
+            ScrollView {
+                VStack(spacing: 2) {
+                    ForEach(shown) { e in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(e.name).font(.system(.callout, design: .monospaced)).lineLimit(1)
+                                Text(e.store.shellExport ? "Mac" : (e.store.path as NSString).lastPathComponent)
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Copy") {
+                                withUnlock(requireUnlock, onFail: { note = "Not unlocked." }) {
+                                    copySecret(e.value, clearAfter: clearSeconds)
+                                    note = clearSeconds > 0 ? "Copied \(e.name), clears in \(clearSeconds) s" : "Copied \(e.name)"
+                                }
+                            }.controlSize(.small)
+                        }.padding(.vertical, 2)
+                    }
+                    if shown.isEmpty { Text("No keys").foregroundStyle(.secondary).padding() }
+                }
+            }.frame(height: 260)
+            if !note.isEmpty { Text(note).font(.caption).foregroundStyle(.secondary) }
+            Divider()
+            HStack {
+                Button("Open envdesk") { openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true) }
+                Spacer()
+                Button("Quit") { NSApp.terminate(nil) }
+            }
+        }
+        .padding(12)
+        .frame(width: 340)
+        .onAppear(perform: reload)
+    }
+}
+
 @main
 struct EnvdeskApp: App {
     init() { NSApplication.shared.setActivationPolicy(.regular) }
-    var body: some Scene { WindowGroup("envdesk") { ContentView() } }
+    var body: some Scene {
+        WindowGroup("envdesk", id: "main") { ContentView() }
+        MenuBarExtra {
+            MenuBarView()
+        } label: {
+            Image(nsImage: Logo.menuBarIcon())
+        }
+        .menuBarExtraStyle(.window)
+    }
 }

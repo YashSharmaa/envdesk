@@ -1,8 +1,10 @@
-# envdesk
+<p align="center"><img src="docs/icon.png" width="160" alt="envdesk icon: a white key with an equals sign in its bow, on a blue-to-teal tile"></p>
+
+<h1 align="center">envdesk</h1>
 
 A small native Mac app for the API keys scattered across your `.env` files and shell profile. Pick a project, paste a key, and it lands in the right file. Browse every key you have, masked, behind Touch ID.
 
-It's one Swift file with no dependencies, no network access and no account. It only reads and writes plain files on your Mac.
+It's two Swift files with no dependencies, no network access and no account. It only reads and writes plain files on your Mac.
 
 ## What it does
 
@@ -18,6 +20,7 @@ It's one Swift file with no dependencies, no network access and no account. It o
 - **Catch mistakes.**
   - A warning appears when a project's env file isn't ignored by git, so it could be committed.
   - A "differs" badge appears when the same name has different values in different files.
+- **Menu bar.** A key icon in the menu bar opens a small panel: pick a project, search, and copy any key with one click, behind Touch ID.
 - **Export `.env.example`** with names only, to commit for teammates.
 - **Backups.** Every change keeps a `.bak` copy beside the file, and files are set to owner-only (`600`).
 
@@ -45,7 +48,7 @@ The app is signed ad hoc on your own Mac, so Gatekeeper doesn't block it. The fi
 
 ## Contributing
 
-Issues and pull requests are welcome. Everything is in `Sources.swift`.
+Issues and pull requests are welcome. The app is in `Sources.swift`, and the logo, drawn in code, is in `Logo.swift`. `./build.sh` regenerates the icon too.
 
 ## Licence
 
